@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
@@ -15,7 +16,7 @@ namespace TollBooth
     public static class ExportLicensePlates
     {
         [FunctionName("ExportLicensePlates")]
-        public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)]HttpRequestMessage req, ILogger log)
+        public static IActionResult Run([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)]HttpRequestMessage req, ILogger log)
         {
             int exportedCount = 0;
             log.LogInformation("Finding license plate data to export");
@@ -26,10 +27,10 @@ namespace TollBooth
             {
                 log.LogInformation($"Retrieved {licensePlates.Count} license plates");
                 var fileMethods = new FileMethods(log);
-                var uploaded = await fileMethods.GenerateAndSaveCsv(licensePlates);
+                var uploaded = fileMethods.GenerateAndSaveCsv(licensePlates).Result;
                 if (uploaded)
                 {
-                    await databaseMethods.MarkLicensePlatesAsExported(licensePlates);
+                    databaseMethods.MarkLicensePlatesAsExported(licensePlates).Wait();
                     exportedCount = licensePlates.Count;
                     log.LogInformation("Finished updating the license plates");
                 }
@@ -46,9 +47,9 @@ namespace TollBooth
                 log.LogWarning("No license plates to export");
             }
 
-            return exportedCount == 0
-                ? req.CreateResponse(HttpStatusCode.NoContent)
-                : req.CreateResponse(HttpStatusCode.OK, $"Exported {exportedCount} license plates");
+            return (exportedCount == 0)
+                ? new NoContentResult()
+                : new OkObjectResult($"Exported {exportedCount} license plates");
         }
     }
 }
